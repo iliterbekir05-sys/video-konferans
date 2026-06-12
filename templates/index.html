@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Video Konferans Platformu</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+      :root {
+        --bg-color: #1e1e24;
+        --panel-bg: #2a2a35;
+        --input-bg: #3e3e4f;
+        --text-color: #fff;
+        --accent-color: #00adb5;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        transition:
+          background-color 0.3s ease,
+          color 0.3s ease;
+        position: relative;
+        min-height: 95vh;
+      }
+
+      h1 {
+        color: var(--accent-color);
+        margin-bottom: 5px;
+      }
+      .user-info {
+        margin-bottom: 15px;
+        color: #aaa;
+        font-style: italic;
+      }
+
+      .exit-room-btn {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        display: none;
+        z-index: 1000;
+      }
+      .menu-burger {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        font-size: 28px;
+        cursor: pointer;
+        color: var(--accent-color);
+        z-index: 1000;
+        user-select: none;
+      }
+
+      /* SIDEBAR (YAN PANEL) */
+      .sidebar {
+        position: fixed;
+        top: 0;
+        left: -320px;
+        width: 280px;
+        height: 100%;
+        background-color: var(--panel-bg);
+        box-shadow: 4px 0 15px rgba(0, 0, 0, 0.5);
+        transition: left 0.3s ease;
+        z-index: 999;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        border-right: 2px solid var(--input-bg);
+      }
+      .sidebar.active {
+        left: 0;
+      }
+      .sidebar-close {
+        text-align: right;
+        font-size: 24px;
+        cursor: pointer;
+        color: #ff5555;
+        margin-bottom: 10px;
+      }
+      .sidebar-tabs {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--input-bg);
+        padding-bottom: 10px;
+      }
+      .tab-btn {
+        background: none;
+        border: none;
+        color: var(--text-color);
+        font-size: 15px;
+        cursor: pointer;
+        padding: 5px 10px;
+        opacity: 0.6;
+      }
+      .tab-btn.active {
+        opacity: 1;
+        color: var(--accent-color);
+        font-weight: bold;
+        border-bottom: 2px solid var(--accent-color);
+      }
+      .tab-content {
+        display: none;
+        flex-direction: column;
+      }
+      .tab-content.active {
+        display: flex;
+      }
+      .profile-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        font-size: 14px;
+      }
+      .profile-table th,
+      .profile-table td {
+        border: 1px solid var(--input-bg);
+        padding: 8px;
+        text-align: left;
+      }
+      .profile-table th {
+        background-color: var(--input-bg);
+        color: var(--accent-color);
+      }
+      .theme-box {
+        background-color: var(--input-bg);
+        padding: 10px;
+        border-radius: 5px;
+        margin-top: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .theme-btn {
+        padding: 8px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+
+      /* GİRİŞ VE ODA AYARLARI */
+      .setup-container {
+        background-color: var(--panel-bg);
+        padding: 25px;
+        border-radius: 10px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      input,
+      button {
+        padding: 10px;
+        margin: 5px;
+        border-radius: 5px;
+        border: none;
+        font-size: 16px;
+      }
+      input {
+        background-color: var(--input-bg);
+        color: white;
+        width: 250px;
+        text-align: center;
+      }
+      button {
+        background-color: var(--accent-color);
+        color: white;
+        cursor: pointer;
+        font-weight: bold;
+      }
+      button:hover {
+        opacity: 0.9;
+      }
+
+      .btn-danger {
+        background-color: #ff5555;
+        color: white;
+      }
+      .btn-warn {
+        background-color: #ffaa00;
+        color: #1e1e24;
+      }
+      .btn-share {
+        background-color: #9b59b6;
+        color: white;
+      }
+      .btn-action {
+        padding: 5px 10px;
+        font-size: 12px;
+        margin: 2px;
+        border-radius: 4px;
+        font-weight: bold;
+      }
+
+      /* SİNEMATİK WORKSPACE (3'TE 2 DÜZEN) */
+      .workspace {
+        display: none;
+        width: 98%;
+        max-width: 1400px;
+        gap: 15px;
+        margin-top: 10px;
+        height: 75vh;
+      }
+
+      .main-video-area {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex: 2.3;
+        height: 100%;
+      }
+      .main-video-box {
+        flex: 1;
+        position: relative;
+        background-color: #000;
+        border-radius: 12px;
+        border: 3px solid var(--input-bg);
+        overflow: hidden;
+      }
+      .main-video-box video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .video-label {
+        position: absolute;
+        bottom: 15px;
+        left: 15px;
+        background-color: rgba(0, 0, 0, 0.6);
+        padding: 5px 12px;
+        border-radius: 5px;
+        font-size: 14px;
+        font-weight: bold;
+        color: var(--accent-color);
+        z-index: 5;
+      }
+
+      .bottom-control-bar {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        background-color: var(--panel-bg);
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid var(--input-bg);
+      }
+
+      .participants-side-column {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        flex: 0.9;
+        height: 100%;
+      }
+
+      /* KATILIMCI VE MODERATÖR PANELİ */
+      .remote-video-box {
+        height: 48%;
+        position: relative;
+        background-color: #000;
+        border-radius: 12px;
+        border: 3px solid var(--input-bg);
+        overflow: hidden;
+      }
+      .remote-video-box video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .moderator-controls {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background-color: rgba(0, 0, 0, 0.85);
+        padding: 8px;
+        border-radius: 8px;
+        display: none; /* Sadece Oda Sahibinde 'flex' olacak */
+        flex-direction: column;
+        gap: 4px;
+        z-index: 10;
+        border: 1px solid #ff5555;
+      }
+
+      /* CHAT PANELİ */
+      .chat-section {
+        height: 48%;
+        background-color: var(--panel-bg);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        border: 2px solid var(--input-bg);
+      }
+      .chat-header {
+        background-color: var(--input-bg);
+        padding: 8px;
+        border-top-left-radius: 10px;
+        border-top-right-radius: 10px;
+        font-weight: bold;
+        color: var(--accent-color);
+        text-align: center;
+        font-size: 14px;
+      }
+      .chat-messages {
+        flex: 1;
+        padding: 10px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .msg {
+        padding: 6px 10px;
+        border-radius: 8px;
+        max-width: 85%;
+        word-wrap: break-word;
+        font-size: 13px;
+      }
+      .msg-incoming {
+        background-color: var(--input-bg);
+        align-self: flex-start;
+        color: #fff;
+      }
+      .msg-outgoing {
+        background-color: var(--accent-color);
+        align-self: flex-end;
+        color: #fff;
+      }
+      .msg-system {
+        background-color: rgba(255, 255, 255, 0.1);
+        align-self: center;
+        color: #aaa;
+        font-size: 11px;
+      }
+      .chat-input-area {
+        display: flex;
+        padding: 8px;
+        border-top: 1px solid var(--input-bg);
+      }
+      .chat-input-area input {
+        flex: 1;
+        margin: 0;
+        margin-right: 5px;
+        padding: 6px;
+        font-size: 14px;
+      }
+      .chat-input-area button {
+        margin: 0;
+        padding: 0 12px;
+        font-size: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="menu-burger" onclick="toggleSidebar()">☰</div>
+
+    <div class="exit-room-btn" id="exit-btn-container">
+      <button class="btn-danger" onclick="odadanCik()">❌ Odadan Ayrıl</button>
+    </div>
+
+    <div class="sidebar" id="mySidebar">
+      <div class="sidebar-close" onclick="toggleSidebar()">✕</div>
+      <div class="sidebar-tabs">
+        <button
+          class="tab-btn active"
+          id="tab-profile-btn"
+          onclick="switchTab('profile')"
+        >
+          👤 Profil
+        </button>
+        <button
+          class="tab-btn"
+          id="tab-settings-btn"
+          onclick="switchTab('settings')"
+        >
+          ⚙️ Genel Ayarlar
+        </button>
+      </div>
+      <div class="tab-content active" id="content-profile">
+        <h3>Kullanıcı Bilgileri</h3>
+        <p style="font-size: 14px; color: var(--accent-color); margin-top: 0">
+          Mühendislik Oturumu
+        </p>
+        <table class="profile-table">
+          <thead>
+            <tr>
+              <th>Ders Adı</th>
+              <th>Süre</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Java Backend</td>
+              <td>45 dk</td>
+            </tr>
+            <tr>
+              <td>Veri Tabanı (SQL)</td>
+              <td>30 dk</td>
+            </tr>
+            <tr>
+              <td>WebRTC Protokolü</td>
+              <td>12 dk</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="tab-content" id="content-settings">
+        <h3>Arayüz Ayarları</h3>
+        <div class="theme-box">
+          <button
+            class="theme-btn"
+            style="
+              background-color: #1e1e24;
+              color: #fff;
+              border: 1px solid #00adb5;
+            "
+            onclick="changeTheme('dark')"
+          >
+            Koyu Tema
+          </button>
+          <button
+            class="theme-btn"
+            style="background-color: #15202b; color: #fff"
+            onclick="changeTheme('navy')"
+          >
+            Gece Mavisi
+          </button>
+          <button
+            class="theme-btn"
+            style="background-color: #2d3748; color: #fff"
+            onclick="changeTheme('slate')"
+          >
+            Arduvaz Grisi
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <h1>Görüntülü Konferans Odası</h1>
+    <div class="user-info">
+      Oturum Açan: <b>{{ session['user_email'] }}</b> |
+      <a href="/logout" style="color: #ff5555">Oturumu Kapat</a>
+    </div>
+
+    <div class="setup-container" id="login-box">
+      <p style="margin-top: 0; color: #aaa">Kafanızdan bir oda kodu uydurun:</p>
+      <input
+        type="text"
+        id="room"
+        placeholder="Örn: java-dersi-55 veya 1029"
+      /><br />
+      <button onclick="baglan(true)">🌐 Yeni Oda Oluştur (Sahibi Ol)</button>
+      <button
+        style="background-color: #ffaa00; color: #1e1e24"
+        onclick="baglan(false)"
+      >
+        🔑 Var Olan Odaya Katıl
+      </button>
+    </div>
+
+    <div class="workspace" id="main-workspace">
+      <div class="main-video-area">
+        <div class="main-video-box">
+          <span class="video-label">Ben (Yerel Ekran)</span>
+          <video id="localVideo" autoplay playsinline muted></video>
+        </div>
+
+        <div class="bottom-control-bar">
+          <button id="mic-btn" class="btn-warn" onclick="sesiKapatAc()">
+            🎙️ Mikrofonu Kapat
+          </button>
+          <button id="cam-btn" class="btn-warn" onclick="kamerayiKapatAc()">
+            📷 Kamerayı Kapat
+          </button>
+          <button
+            id="screen-btn"
+            class="btn-share"
+            onclick="ekranPaylasiminiTetikle()"
+          >
+            🖥️ Ekranı Paylaş
+          </button>
+        </div>
+      </div>
+
+      <div class="participants-side-column">
+        <div class="remote-video-box">
+          <span class="video-label">Katılımcı</span>
+          <video id="remoteVideo" autoplay playsinline></video>
+
+          <div class="moderator-controls" id="mod-panel">
+            <p
+              style="
+                margin: 0 0 5px 0;
+                font-size: 11px;
+                text-align: center;
+                color: #ff5555;
+                font-weight: bold;
+              "
+            >
+              Oda Sahibi Yetkileri
+            </p>
+            <button
+              class="btn-danger btn-action"
+              onclick="moderatörKomutuGonder('kick')"
+            >
+              🚫 Odadan At
+            </button>
+
+            <button
+              class="btn-warn btn-action"
+              onclick="moderatörKomutuGonder('mute-mic')"
+            >
+              🛑 Sesi Kapat
+            </button>
+            <button
+              class="btn-warn btn-action"
+              onclick="moderatörKomutuGonder('close-cam')"
+            >
+              🛑 Kamerayı Kapat
+            </button>
+
+            <button
+              class="btn-action"
+              style="background-color: #2ecc71"
+              onclick="moderatörKomutuGonder('unmute-mic')"
+            >
+              🔔 Ses Açma İsteği Gönder
+            </button>
+            <button
+              class="btn-action"
+              style="background-color: #2ecc71"
+              onclick="moderatörKomutuGonder('open-cam')"
+            >
+              🔔 Kamera Açma İsteği Gönder
+            </button>
+          </div>
+        </div>
+
+        <div class="chat-section">
+          <div class="chat-header">💬 Oda Sohbeti</div>
+          <div class="chat-messages" id="chat-messages"></div>
+          <div class="chat-input-area">
+            <input
+              type="text"
+              id="chat-input"
+              placeholder="Mesaj yaz..."
+              onkeypress="handleKeyPress(event)"
+            />
+            <button onclick="mesajGonder()">Gönder</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const socket = io();
+      let localStream;
+      let screenStream = null;
+      let peerConnection;
+      let odaAdi;
+      const kullaniciAdı = "{{ session['user_email'] }}";
+
+      let sesAcik = true;
+      let kameraAcik = true;
+      let ekranPaylasiliyor = false;
+      let amIOwner = false;
+
+      const rtcConfig = {
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      };
+
+      function toggleSidebar() {
+        document.getElementById("mySidebar").classList.toggle("active");
+      }
+      function switchTab(tabName) {
+        document.getElementById("tab-profile-btn").classList.remove("active");
+        document.getElementById("tab-settings-btn").classList.remove("active");
+        document.getElementById("content-profile").classList.remove("active");
+        document.getElementById("content-settings").classList.remove("active");
+        if (tabName === "profile") {
+          document.getElementById("tab-profile-btn").classList.add("active");
+          document.getElementById("content-profile").classList.add("active");
+        } else {
+          document.getElementById("tab-settings-btn").classList.add("active");
+          document.getElementById("content-settings").classList.add("active");
+        }
+      }
+      function changeTheme(theme) {
+        const root = document.documentElement;
+        if (theme === "dark") {
+          root.style.setProperty("--bg-color", "#1e1e24");
+          root.style.setProperty("--panel-bg", "#2a2a35");
+          root.style.setProperty("--input-bg", "#3e3e4f");
+        } else if (theme === "navy") {
+          root.style.setProperty("--bg-color", "#15202b");
+          root.style.setProperty("--panel-bg", "#192734");
+          root.style.setProperty("--input-bg", "#22303c");
+        } else if (theme === "slate") {
+          root.style.setProperty("--bg-color", "#2d3748");
+          root.style.setProperty("--panel-bg", "#1a202c");
+          root.style.setProperty("--input-bg", "#4a5568");
+        }
+      }
+
+      async function baglan(isCreator) {
+        odaAdi = document.getElementById("room").value.trim();
+        if (!odaAdi) {
+          alert("Lütfen bir oda kodu uydurun veya girin!");
+          return;
+        }
+
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        document.getElementById("localVideo").srcObject = localStream;
+
+        document.getElementById("login-box").style.display = "none";
+        document.getElementById("main-workspace").style.display = "flex";
+        document.getElementById("exit-btn-container").style.display = "block";
+
+        if (isCreator) amIOwner = true;
+
+        socket.emit("join", {
+          room: odaAdi,
+          username: kullaniciAdı,
+          isCreator: isCreator,
+        });
+      }
+
+      // Sahiplik kontrolünü dinle
+      socket.on("room-info", (data) => {
+        if (data.owner === kullaniciAdı) {
+          amIOwner = true;
+          document.getElementById("mod-panel").style.display = "flex"; // Sadece oda sahibinde yönetim panelini göster
+        }
+      });
+
+      function moderatörKomutuGonder(cmd) {
+        socket.emit("moderator-command", { room: odaAdi, command: cmd });
+      }
+
+      // KATILIMCILARIN MODERATÖR KOMUTLARINA TEPKİ VERMESİ
+      socket.on("moderator-action", (data) => {
+        if (amIOwner) return; // Komut oda sahibinin kendisine etki etmesin
+
+        // 1. Madde ve 3. Madde Karşılaştırması: Direkt Kapatma Komutları
+        if (data.command === "kick") {
+          alert("Oda sahibi tarafından odadan çıkarıldınız!");
+          odadanCik();
+        } else if (data.command === "mute-mic") {
+          if (localStream && sesAcik) {
+            sesiKapatAc();
+            alert("Oda sahibi mikrofonunuzu kapattı.");
+          }
+        } else if (data.command === "close-cam") {
+          if (localStream && kameraAcik) {
+            kamerayiKapatAc();
+            alert("Oda sahibi kameranızı kapattı.");
+          }
+        }
+        // 2. Madde: Bildirim/İstek Gönderme Komutları (Kullanıcı onaylarsa açılır)
+        else if (data.command === "unmute-mic") {
+          if (
+            confirm(
+              "Oda sahibi mikrofonunuzu açmanızı istiyor. Onaylıyor musunuz?",
+            )
+          ) {
+            if (!sesAcik) sesiKapatAc();
+          }
+        } else if (data.command === "open-cam") {
+          if (
+            confirm(
+              "Oda sahibi kameranızı açmanızı istiyor. Onaylıyor musunuz?",
+            )
+          ) {
+            if (!kameraAcik) kamerayiKapatAc();
+          }
+        }
+      });
+
+      // --- WEBRTC VE SOHBET AKIŞI ---
+      async function ekranPaylasiminiTetikle() {
+        const screenBtn = document.getElementById("screen-btn");
+        if (!ekranPaylasiliyor) {
+          try {
+            screenStream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+            });
+            document.getElementById("localVideo").srcObject = screenStream;
+            if (peerConnection) {
+              const senders = peerConnection.getSenders();
+              const videoSender = senders.find(
+                (sender) => sender.track && sender.track.kind === "video",
+              );
+              if (videoSender) {
+                videoSender.replaceTrack(screenStream.getVideoTracks()[0]);
+              }
+            }
+            screenStream.getVideoTracks()[0].onended = () => {
+              ekranPaylasiminiDurdur();
+            };
+            screenBtn.innerText = "🛑 Paylaşımı Durdur";
+            screenBtn.className = "btn-danger";
+            ekranPaylasiliyor = true;
+          } catch (err) {
+            console.error(err);
+          }
+        } else {
+          ekranPaylasiminiDurdur();
+        }
+      }
+
+      function ekranPaylasiminiDurdur() {
+        const screenBtn = document.getElementById("screen-btn");
+        if (screenStream) {
+          screenStream.getTracks().forEach((track) => track.stop());
+        }
+        document.getElementById("localVideo").srcObject = localStream;
+        if (peerConnection) {
+          const senders = peerConnection.getSenders();
+          const videoSender = senders.find(
+            (sender) => sender.track && sender.track.kind === "video",
+          );
+          if (videoSender && localStream) {
+            videoSender.replaceTrack(localStream.getVideoTracks()[0]);
+          }
+        }
+        screenBtn.innerText = "🖥️ Ekranı Paylaş";
+        screenBtn.className = "btn-share";
+        ekranPaylasiliyor = false;
+      }
+
+      function mesajGonder() {
+        const input = document.getElementById("chat-input");
+        const m = input.value.trim();
+        if (m === "") return;
+        socket.emit("message", { room: odaAdi, sender: kullaniciAdı, text: m });
+        input.value = "";
+      }
+      function handleKeyPress(event) {
+        if (event.key === "Enter") {
+          mesajGonder();
+        }
+      }
+
+      socket.on("message", (data) => {
+        const cm = document.getElementById("chat-messages");
+        const ym = document.createElement("div");
+        if (data.sender == kullaniciAdı) {
+          ym.className = "msg msg-outgoing";
+          ym.innerHTML = `<b>Ben:</b><br>${data.text}`;
+        } else {
+          ym.className = "msg msg-incoming";
+          ym.innerHTML = `<b>${data.sender.split("@")[0]}:</b><br>${data.text}`;
+        }
+        cm.appendChild(ym);
+        cm.scrollTop = cm.scrollHeight;
+      });
+
+      socket.on("user-connected", async (username) => {
+        const cm = document.getElementById("chat-messages");
+        const sn = document.createElement("div");
+        sn.className = "msg msg-system";
+        sn.innerText = `${username.split("@")[0]} odaya katıldı.`;
+        cm.appendChild(sn);
+        hazirlikYap();
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        socket.emit("signal", {
+          room: odaAdi,
+          sdp: peerConnection.localDescription,
+        });
+      });
+
+      socket.on("signal", async (data) => {
+        if (!peerConnection) {
+          hazirlikYap();
+        }
+        if (data.sdp) {
+          await peerConnection.setRemoteDescription(
+            new RTCSessionDescription(data.sdp),
+          );
+          if (data.sdp.type === "offer") {
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            socket.emit("signal", {
+              room: odaAdi,
+              sdp: peerConnection.localDescription,
+            });
+          }
+        } else if (data.candidate) {
+          await peerConnection.addIceCandidate(
+            new RTCIceCandidate(data.candidate),
+          );
+        }
+      });
+
+      socket.on("user-disconnected", () => {
+        document.getElementById("remoteVideo").srcObject = null;
+        const cm = document.getElementById("chat-messages");
+        const sn = document.createElement("div");
+        sn.className = "msg msg-system";
+        sn.innerText = "Katılımcı odadan ayrıldı.";
+        cm.appendChild(sn);
+      });
+
+      function hazirlikYap() {
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        localStream
+          .getTracks()
+          .forEach((track) => peerConnection.addTrack(track, localStream));
+        peerConnection.ontrack = (event) => {
+          document.getElementById("remoteVideo").streams[0]
+            ? (document.getElementById("remoteVideo").srcObject =
+                event.streams[0])
+            : null;
+        };
+        peerConnection.onicecandidate = (event) => {
+          if (event.candidate) {
+            socket.emit("signal", { room: odaAdi, candidate: event.candidate });
+          }
+        };
+      }
+
+      function sesiKapatAc() {
+        if (localStream) {
+          localStream.getAudioTracks().forEach((track) => {
+            track.enabled = !track.enabled;
+            sesAcik = track.enabled;
+          });
+          const micBtn = document.getElementById("mic-btn");
+          micBtn.innerText = sesAcik ? "🎙️ Mikrofonu Kapat" : "🔇 Mikrofonu Aç";
+          micBtn.className = sesAcik ? "btn-warn" : "";
+        }
+      }
+      function kamerayiKapatAc() {
+        if (localStream) {
+          localStream.getVideoTracks().forEach((track) => {
+            track.enabled = !track.enabled;
+            kameraAcik = track.enabled;
+          });
+          const camBtn = document.getElementById("cam-btn");
+          camBtn.innerText = kameraAcik
+            ? "📷 Kamerayı Kapat"
+            : "🚫 Kamerayı Aç";
+          camBtn.className = kameraAcik ? "btn-warn" : "";
+        }
+      }
+      function odadanCik() {
+        if (localStream) {
+          localStream.getTracks().forEach((track) => track.stop());
+        }
+        if (screenStream) {
+          screenStream.getTracks().forEach((track) => track.stop());
+        }
+        if (peerConnection) {
+          peerConnection.close();
+        }
+        window.location.reload();
+      }
+    </script>
+  </body>
+</html>

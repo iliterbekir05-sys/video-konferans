@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Giriş / Kayıt / Şifre Yenile</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background-color: #1e1e24;
+        color: #fff;
+        margin: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+      }
+      .auth-container {
+        background-color: #2a2a35;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        width: 350px;
+        text-align: center;
+      }
+      h2 {
+        color: #00adb5;
+        margin-bottom: 20px;
+      }
+      input {
+        width: 90%;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+        border: none;
+        background-color: #3e3e4f;
+        color: white;
+        font-size: 16px;
+      }
+      button {
+        width: 96%;
+        padding: 10px;
+        margin-top: 15px;
+        border-radius: 5px;
+        border: none;
+        background-color: #00adb5;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        cursor: pointer;
+      }
+      button:hover {
+        background-color: #007c82;
+      }
+      .toggle-link {
+        margin-top: 15px;
+        font-size: 14px;
+        color: #bbb;
+        cursor: pointer;
+      }
+      .toggle-link span {
+        color: #00adb5;
+        text-decoration: underline;
+      }
+      .error-msg {
+        color: #ff5555;
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+      .success-msg {
+        color: #55ff55;
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+
+      .code-box {
+        background-color: #1a1a24;
+        border-left: 4px solid #00adb5;
+        padding: 12px;
+        margin: 15px 0;
+        border-radius: 4px;
+        text-align: left;
+        display: none;
+      }
+      .code-box p {
+        margin: 0 0 5px 0;
+        font-size: 13px;
+        color: #aaa;
+      }
+      .code-box strong {
+        font-size: 18px;
+        color: #55ff55;
+        letter-spacing: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="auth-container">
+      <h2 id="auth-title">Giriş Yap</h2>
+
+      {% with messages = get_flashed_messages(with_categories=true) %} {% if
+      messages %} {% for category, message in messages %}
+      <div
+        class="{{ 'success-msg' if category == 'success' else 'error-msg' }}"
+      >
+        {{ message }}
+      </div>
+      {% endfor %} {% endif %} {% endwith %}
+
+      <div id="simulated-msg"></div>
+
+      <form id="auth-form" action="/login" method="POST">
+        <input
+          type="email"
+          name="email"
+          placeholder="E-posta Adresiniz"
+          required
+        />
+        <input
+          type="password"
+          name="password"
+          placeholder="Şifreniz"
+          required
+        />
+        <button type="submit" id="auth-btn">Giriş Yap</button>
+      </form>
+
+      <div id="forgot-form" style="display: none">
+        <p style="font-size: 14px; color: #ccc">
+          Kayıtlı e-posta adresinizi girin, size 6 haneli bir doğrulama kodu
+          üreteceğiz.
+        </p>
+        <input type="email" id="forgot-email" placeholder="E-posta Adresiniz" />
+        <button type="button" onclick="sozdeKodUret()">
+          Doğrulama Kodu Oluştur
+        </button>
+      </div>
+
+      <div class="code-box" id="code-display-box">
+        <p>📧 <b>Sözde E-posta Sunucusu:</b></p>
+        <p>Kullanıcı mailine gönderilen 6 haneli kod:</p>
+        <p style="text-align: center">
+          <strong id="generated-code">123456</strong>
+        </p>
+      </div>
+
+      <form
+        id="reset-form"
+        action="/reset-password"
+        method="POST"
+        style="display: none"
+      >
+        <p style="font-size: 13px; color: #aaa">
+          Onaylamak için e-postanızı tekrar yazın:
+        </p>
+        <input
+          type="email"
+          name="email"
+          id="reset-email-field"
+          placeholder="E-posta Adresiniz"
+          required
+        />
+        <input
+          type="text"
+          name="code"
+          placeholder="Ekranda Gördüğünüz Kod"
+          required
+        />
+        <input
+          type="password"
+          name="new_password"
+          placeholder="Yeni Şifreniz"
+          required
+        />
+        <button type="submit">Şifreyi Güncelle</button>
+      </form>
+
+      <div class="toggle-link" id="register-toggle" onclick="toggleAuth()">
+        Hesabınız yok mu? <span>Kayıt Olun</span>
+      </div>
+      <div
+        class="toggle-link"
+        id="forgot-toggle"
+        onclick="showForgotPassword()"
+      >
+        Şifrenizi mi unuttunuz? <span>Şifremi Yenile</span>
+      </div>
+    </div>
+
+    <script>
+      let currentState = "login";
+
+      function toggleAuth() {
+        document.getElementById("forgot-form").style.display = "none";
+        document.getElementById("reset-form").style.display = "none";
+        document.getElementById("code-display-box").style.display = "none";
+        document.getElementById("simulated-msg").innerHTML = "";
+
+        const title = document.getElementById("auth-title");
+        const btn = document.getElementById("auth-btn");
+        const form = document.getElementById("auth-form");
+        const regToggle = document.getElementById("register-toggle");
+        const forgotToggle = document.getElementById("forgot-toggle");
+
+        form.style.display = "block";
+        forgotToggle.style.display = "block";
+
+        if (
+          currentState === "login" ||
+          currentState === "forgot" ||
+          currentState === "reset"
+        ) {
+          title.innerText = "Kayıt Ol";
+          btn.innerText = "Kayıt Ol";
+          form.action = "/register";
+          regToggle.innerHTML =
+            "Zaten hesabınız var mı? <span>Giriş Yapın</span>";
+          currentState = "register";
+        } else {
+          title.innerText = "Giriş Yap";
+          btn.innerText = "Giriş Yap";
+          form.action = "/login";
+          regToggle.innerHTML = "Hesabınız yok mu? <span>Kayıt Olun</span>";
+          currentState = "login";
+        }
+      }
+
+      function showForgotPassword() {
+        document.getElementById("auth-title").innerText = "Şifremi Unuttum";
+        document.getElementById("auth-form").style.display = "none";
+        document.getElementById("reset-form").style.display = "none";
+        document.getElementById("forgot-form").style.display = "block";
+        document.getElementById("code-display-box").style.display = "none";
+
+        document.getElementById("register-toggle").innerHTML =
+          "Giriş sayfasına dönmek için <span>tıklayın</span>";
+        document.getElementById("forgot-toggle").style.display = "none";
+        currentState = "forgot";
+      }
+
+      function sozdeKodUret() {
+        const email = document.getElementById("forgot-email").value;
+        if (!email || !email.includes("@")) {
+          alert("Lütfen geçerli bir e-posta adresi girin!");
+          return;
+        }
+
+        // İkinci aşamadaki kutuya e-postayı otomatik kopyala
+        document.getElementById("reset-email-field").value = email;
+
+        let uretilenKod = Math.floor(
+          100000 + Math.random() * 900000,
+        ).toString();
+        document.getElementById("generated-code").innerText = uretilenKod;
+        document.getElementById("code-display-box").style.display = "block";
+
+        document.getElementById("simulated-msg").innerHTML =
+          "<div class='success-msg'>Kod başarıyla üretildi! Lütfen not edin.</div>";
+
+        setTimeout(() => {
+          document.getElementById("forgot-form").style.display = "none";
+          document.getElementById("reset-form").style.display = "block";
+          document.getElementById("auth-title").innerText = "Kodu Doğrula";
+        }, 800);
+      }
+    </script>
+  </body>
+</html>
